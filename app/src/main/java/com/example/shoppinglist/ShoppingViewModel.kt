@@ -20,6 +20,12 @@ class ShoppingViewModel(application: Application) : AndroidViewModel(application
     var shoppingList = mutableStateListOf<ShoppingItem>()
         private set
 
+    val pendingList: List<ShoppingItem>
+        get() = shoppingList.filter { !it.haveItem }
+
+    val checkedList: List<ShoppingItem>
+        get() = shoppingList.filter { it.haveItem }
+
     private val _snackbarMessage = MutableSharedFlow<String>()
     val snackbarMessage = _snackbarMessage.asSharedFlow()
 
