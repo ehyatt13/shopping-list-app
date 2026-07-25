@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,10 +15,15 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
@@ -28,13 +34,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -115,6 +124,8 @@ fun AppBottomNavigation(navController: NavController) {
 @Composable
 fun ShoppingListScreen(viewModel: ShoppingViewModel, items: List<ShoppingItem>) {
     val snackbarHostState = remember { SnackbarHostState() }
+    var showMenu by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
 
     LaunchedEffect(Unit) {
         viewModel.snackbarMessage.collectLatest { message ->
@@ -138,7 +149,6 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel, items: List<ShoppingItem>) 
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-
                 OutlinedTextField(
                     value = viewModel.newItemText.value,
                     onValueChange = { viewModel.onNewItemTextChange(it) },
@@ -150,12 +160,32 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel, items: List<ShoppingItem>) 
                 Button(
                     onClick = { viewModel.addItem() },
                     enabled = viewModel.newItemText.value.isNotBlank(),
+                    modifier = Modifier.padding(horizontal = 8.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.Green,
                         contentColor = Color.Black
                     )
                 ) {
                     Text("Add Item")
+                }
+
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Export to Clipboard") },
+                            onClick = {
+                                val uncheckedItems = viewModel.pendingList.joinToString("\n") { it.itemName }
+                                clipboardManager.setText(AnnotatedString(uncheckedItems))
+                                showMenu = false
+                            }
+                        )
+                    }
                 }
             }
 

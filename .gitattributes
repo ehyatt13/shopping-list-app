@@ -1,0 +1,19 @@
+# Automatically normalize line endings for all text files
+* text=auto
+
+# Enforce Unix (LF) for the Linux Gradle wrapper script
+gradlew text eol=lf
+
+# Enforce Windows (CRLF) for the Windows Gradle batch file
+gradlew.bat text eol=crlf
+
+# Ensure local properties and gradle properties use standard formatting
+*.properties text
+
+# Treat common Android assets as binary files (never change line endings)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.jar binary
+*.aar binary
