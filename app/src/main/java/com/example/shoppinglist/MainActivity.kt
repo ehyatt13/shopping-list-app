@@ -17,20 +17,27 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.SyncAlt
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,8 +50,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -125,12 +134,114 @@ fun AppBottomNavigation(navController: NavController) {
 fun ShoppingListScreen(viewModel: ShoppingViewModel, items: List<ShoppingItem>) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showMenu by remember { mutableStateOf(false) }
+    var showNameDialog by remember { mutableStateOf(false) }
+    var tempName by remember { mutableStateOf(viewModel.userName.value) }
     val clipboardManager = LocalClipboardManager.current
 
     LaunchedEffect(Unit) {
         viewModel.snackbarMessage.collectLatest { message ->
             snackbarHostState.showSnackbar(message)
         }
+    }
+
+    if (showNameDialog) {
+        var errorMessage by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showNameDialog = false },
+            title = { Text("Set Your Nickname") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = tempName,
+                        onValueChange = { 
+                            tempName = it
+                            errorMessage = ""
+                        },
+                        label = { Text("Nickname") },
+                        singleLine = true,
+                        isError = errorMessage.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (errorMessage.isNotEmpty()) {
+                        Text(
+                            text = errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setUserName(tempName) { success, message ->
+                        if (success) {
+                            showNameDialog = false
+                        } else {
+                            errorMessage = message
+                        }
+                    }
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNameDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    viewModel.duplicateWarningMessage.value?.let { message ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDuplicateWarning() },
+            title = { Text("Duplicate Item") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmDuplicate() }) {
+                    Text("Add Anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissDuplicateWarning() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    viewModel.deleteWarningItem.value?.let { item ->
+        var disableWarningFor5Min by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDeleteWarning() },
+            title = { Text("Confirm Delete") },
+            text = {
+                Column {
+                    Text("Are you sure you want to delete '${item.itemName}'?")
+                    Row(
+                        modifier = Modifier.padding(top = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = disableWarningFor5Min,
+                            onCheckedChange = { disableWarningFor5Min = it }
+                        )
+                        Text(
+                            text = "Don't show again for 5 minutes",
+                            modifier = Modifier.padding(start = 8.dp),
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmDelete(item, disableWarningFor5Min) }) {
+                    Text("Delete", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissDeleteWarning() }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -141,59 +252,94 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel, items: List<ShoppingItem>) 
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                OutlinedTextField(
-                    value = viewModel.newItemText.value,
-                    onValueChange = { viewModel.onNewItemTextChange(it) },
-                    label = { Text("Enter New Item") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
+            TabRow(selectedTabIndex = viewModel.currentMode.value.ordinal) {
+                Tab(
+                    selected = viewModel.currentMode.value == ListMode.PERSONAL,
+                    onClick = { viewModel.switchMode(ListMode.PERSONAL) },
+                    text = { Text("Personal") }
                 )
-
-                Button(
-                    onClick = { viewModel.addItem() },
-                    enabled = viewModel.newItemText.value.isNotBlank(),
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Green,
-                        contentColor = Color.Black
-                    )
-                ) {
-                    Text("Add Item")
-                }
-
-                Box {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Export to Clipboard") },
-                            onClick = {
-                                val uncheckedItems = viewModel.pendingList.joinToString("\n") { it.itemName }
-                                clipboardManager.setText(AnnotatedString(uncheckedItems))
-                                showMenu = false
-                            }
-                        )
-                    }
-                }
+                Tab(
+                    selected = viewModel.currentMode.value == ListMode.SHARED,
+                    onClick = { viewModel.switchMode(ListMode.SHARED) },
+                    text = { Text("Shared") }
+                )
             }
 
-            LazyColumn(
-                modifier = Modifier.padding(top = 16.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                items(items) { item ->
-                    ShoppingListItem(item = item, onToggle = { viewModel.toggleItemChecked(item) }, onDelete = { viewModel.removeItem(item) })
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    OutlinedTextField(
+                        value = viewModel.newItemText.value,
+                        onValueChange = { viewModel.onNewItemTextChange(it) },
+                        label = { Text("Enter New Item") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Button(
+                        onClick = { viewModel.addItem() },
+                        enabled = viewModel.newItemText.value.isNotBlank(),
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Green,
+                            contentColor = Color.Black
+                        )
+                    ) {
+                        Text("Add")
+                    }
+
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Set Nickname (${viewModel.userName.value})") },
+                                onClick = {
+                                    tempName = viewModel.userName.value
+                                    showNameDialog = true
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export to Clipboard") },
+                                onClick = {
+                                    val uncheckedItems = viewModel.pendingList.joinToString("\n") { it.itemName }
+                                    clipboardManager.setText(AnnotatedString(uncheckedItems))
+                                    showMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier.padding(top = 16.dp)
+                ) {
+                    items(items, key = { it.id }) { item ->
+                        ShoppingListItem(
+                            item = item,
+                            showOwner = viewModel.currentMode.value == ListMode.SHARED,
+                            canDelete = viewModel.currentMode.value == ListMode.PERSONAL || 
+                                        item.addedById == viewModel.userId || 
+                                        item.addedById.isEmpty(),
+                            onToggle = { viewModel.toggleItemChecked(item) },
+                            onDelete = { viewModel.requestDelete(item) },
+                            onCopy = { viewModel.copyToOtherList(item) }
+                        )
+                    }
                 }
             }
         }
@@ -201,31 +347,57 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel, items: List<ShoppingItem>) 
 }
 
 @Composable
-fun ShoppingListItem(item: ShoppingItem, onToggle: () -> Unit, onDelete: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Checkbox(
-            checked = item.haveItem,
-            onCheckedChange = { onToggle() }
-        )
-        Text(
-            text = item.itemName,
-            textDecoration = if (item.haveItem) TextDecoration.LineThrough else null,
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
-        )
-        Button(
-            onClick = onDelete,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Red,
-                contentColor = Color.Black
-            )
+fun ShoppingListItem(
+    item: ShoppingItem,
+    showOwner: Boolean,
+    canDelete: Boolean,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit,
+    onCopy: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Delete Item")
+            Checkbox(
+                checked = item.haveItem,
+                onCheckedChange = { onToggle() }
+            )
+            Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                Text(
+                    text = item.itemName,
+                    textDecoration = if (item.haveItem) TextDecoration.LineThrough else null,
+                    fontSize = 18.sp
+                )
+                if (showOwner) {
+                    Text(
+                        text = "Added by: ${item.addedBy}",
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                        fontWeight = FontWeight.Light
+                    )
+                }
+            }
+            IconButton(onClick = onCopy) {
+                Icon(Icons.Default.SyncAlt, contentDescription = "Copy to other list", tint = Color.Blue)
+            }
+            if (canDelete) {
+                Button(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Red,
+                        contentColor = Color.Black
+                    ),
+                    modifier = Modifier.padding(start = 4.dp)
+                ) {
+                    Text("Delete")
+                }
+            }
         }
+        HorizontalDivider(thickness = 0.5.dp, color = Color.LightGray)
     }
 }
