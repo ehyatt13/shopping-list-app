@@ -13,10 +13,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -306,6 +309,13 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel, items: List<ShoppingItem>) 
                             onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
+                                text = { Text(if (viewModel.syncEnabled.value) "Disable Sync" else "Enable Sync") },
+                                onClick = {
+                                    viewModel.toggleSyncSetting()
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Set Nickname (${viewModel.userName.value})") },
                                 onClick = {
                                     tempName = viewModel.userName.value
@@ -329,12 +339,26 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel, items: List<ShoppingItem>) 
                     modifier = Modifier.padding(top = 16.dp)
                 ) {
                     items(items, key = { it.id }) { item ->
+                        val isLinked = viewModel.syncEnabled.value && 
+                            if (viewModel.currentMode.value == ListMode.PERSONAL) {
+                                viewModel.sharedShoppingList.any { it.itemName.equals(item.itemName, ignoreCase = true) && it.addedById == viewModel.userId }
+                            } else {
+                                viewModel.localShoppingList.any { it.itemName.equals(item.itemName, ignoreCase = true) }
+                            }
+                        
+                        val externalCheck = viewModel.currentMode.value == ListMode.PERSONAL && 
+                            item.haveItem && 
+                            item.checkedById.isNotEmpty() && 
+                            item.checkedById != viewModel.userId
+
                         ShoppingListItem(
                             item = item,
                             showOwner = viewModel.currentMode.value == ListMode.SHARED,
                             canDelete = viewModel.currentMode.value == ListMode.PERSONAL || 
                                         item.addedById == viewModel.userId || 
                                         item.addedById.isEmpty(),
+                            isLinked = isLinked,
+                            externalCheck = externalCheck,
                             onToggle = { viewModel.toggleItemChecked(item) },
                             onDelete = { viewModel.requestDelete(item) },
                             onCopy = { viewModel.copyToOtherList(item) }
@@ -351,6 +375,8 @@ fun ShoppingListItem(
     item: ShoppingItem,
     showOwner: Boolean,
     canDelete: Boolean,
+    isLinked: Boolean,
+    externalCheck: Boolean,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
     onCopy: () -> Unit
@@ -363,16 +389,37 @@ fun ShoppingListItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Checkbox(
-                checked = item.haveItem,
-                onCheckedChange = { onToggle() }
-            )
-            Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                Text(
-                    text = item.itemName,
-                    textDecoration = if (item.haveItem) TextDecoration.LineThrough else null,
-                    fontSize = 18.sp
+            Box(contentAlignment = Alignment.Center) {
+                Checkbox(
+                    checked = item.haveItem,
+                    onCheckedChange = { onToggle() }
                 )
+                if (externalCheck) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Checked by someone else",
+                        tint = Color.Magenta,
+                        modifier = Modifier.size(16.dp).align(Alignment.TopEnd).padding(end = 4.dp)
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = item.itemName,
+                        textDecoration = if (item.haveItem) TextDecoration.LineThrough else null,
+                        fontSize = 18.sp,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (isLinked) {
+                        Icon(
+                            imageVector = Icons.Default.Link,
+                            contentDescription = "Synced",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(16.dp).padding(start = 4.dp)
+                        )
+                    }
+                }
                 if (showOwner) {
                     Text(
                         text = "Added by: ${item.addedBy}",

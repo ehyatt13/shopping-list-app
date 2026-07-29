@@ -24,7 +24,8 @@ data class ShoppingItem(
     val itemName: String = "",
     val haveItem: Boolean = false,
     val addedBy: String = "Me",
-    val addedById: String = ""
+    val addedById: String = "",
+    val checkedById: String = ""
 ) : Serializable {
     companion object {
         private const val serialVersionUID = 1L
@@ -53,6 +54,9 @@ class ShoppingViewModel(application: Application) : AndroidViewModel(application
     }
 
     var userName = mutableStateOf(sharedPrefs.getString("user_name", "User_${userId.take(4)}") ?: "")
+        private set
+
+    var syncEnabled = mutableStateOf(sharedPrefs.getBoolean("sync_enabled", true))
         private set
 
     var localShoppingList = mutableStateListOf<ShoppingItem>()
@@ -88,13 +92,14 @@ class ShoppingViewModel(application: Application) : AndroidViewModel(application
             // Java Serialization can bypass Kotlin's nullability rules at runtime.
             // We ensure ALL fields are non-null and repaired if corrupted by older versions.
             @Suppress("SENSELESS_COMPARISON", "USELESS_ELVIS")
-            if (item.id == null || item.itemName == null || item.addedBy == null || item.addedById == null) {
+            if (item.id == null || item.itemName == null || item.addedBy == null || item.addedById == null || item.checkedById == null) {
                 ShoppingItem(
                     id = item.id ?: UUID.randomUUID().toString(),
                     itemName = item.itemName ?: "Unknown Item",
                     haveItem = item.haveItem,
                     addedBy = item.addedBy ?: userName.value,
-                    addedById = item.addedById ?: userId
+                    addedById = item.addedById ?: userId,
+                    checkedById = item.checkedById ?: ""
                 )
             } else {
                 item
@@ -176,6 +181,25 @@ class ShoppingViewModel(application: Application) : AndroidViewModel(application
                 }
                 sharedShoppingList.clear()
                 sharedShoppingList.addAll(items)
+
+                // If sync is enabled, update local items that match shared items
+                if (syncEnabled.value) {
+                    items.forEach { sharedItem ->
+                        if (sharedItem.addedById == userId) {
+                            val localIndex = localShoppingList.indexOfFirst { it.itemName.equals(sharedItem.itemName, ignoreCase = true) }
+                            if (localIndex != -1) {
+                                val localItem = localShoppingList[localIndex]
+                                if (localItem.haveItem != sharedItem.haveItem) {
+                                    localShoppingList[localIndex] = localItem.copy(
+                                        haveItem = sharedItem.haveItem,
+                                        checkedById = sharedItem.checkedById
+                                    )
+                                    saveLocalData()
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             override fun onCancelled(error: DatabaseError) {
@@ -228,6 +252,12 @@ class ShoppingViewModel(application: Application) : AndroidViewModel(application
 
     fun switchMode(mode: ListMode) {
         currentMode.value = mode
+    }
+
+    fun toggleSyncSetting() {
+        val newValue = !syncEnabled.value
+        syncEnabled.value = newValue
+        sharedPrefs.edit().putBoolean("sync_enabled", newValue).apply()
     }
 
     fun onNewItemTextChange(newText: String) {
@@ -283,15 +313,40 @@ class ShoppingViewModel(application: Application) : AndroidViewModel(application
 
 
     fun toggleItemChecked(item: ShoppingItem) {
-        val updatedItem = item.copy(haveItem = !item.haveItem)
+        val updatedItem = item.copy(
+            haveItem = !item.haveItem,
+            checkedById = userId
+        )
         if (currentMode.value == ListMode.PERSONAL) {
             val index = localShoppingList.indexOfFirst { it.id == item.id }
             if (index != -1) {
                 localShoppingList[index] = updatedItem
                 saveLocalData()
+
+                // Sync to shared if enabled
+                if (syncEnabled.value) {
+                    sharedShoppingList.find { it.itemName.equals(item.itemName, ignoreCase = true) && it.addedById == userId }?.let { sharedMatch ->
+                        database.child(sharedMatch.id).setValue(sharedMatch.copy(
+                            haveItem = updatedItem.haveItem,
+                            checkedById = userId
+                        ))
+                    }
+                }
             }
         } else {
             database.child(item.id).setValue(updatedItem)
+            
+            // Sync to local if enabled
+            if (syncEnabled.value) {
+                val localIndex = localShoppingList.indexOfFirst { it.itemName.equals(item.itemName, ignoreCase = true) }
+                if (localIndex != -1) {
+                    localShoppingList[localIndex] = localShoppingList[localIndex].copy(
+                        haveItem = updatedItem.haveItem,
+                        checkedById = userId
+                    )
+                    saveLocalData()
+                }
+            }
         }
     }
 
