@@ -59,6 +59,9 @@ class ShoppingViewModel(application: Application) : AndroidViewModel(application
     var syncEnabled = mutableStateOf(sharedPrefs.getBoolean("sync_enabled", true))
         private set
 
+    var isReverseMode = mutableStateOf(sharedPrefs.getBoolean("reverse_mode", false))
+        private set
+
     var localShoppingList = mutableStateListOf<ShoppingItem>()
         private set
 
@@ -258,6 +261,12 @@ class ShoppingViewModel(application: Application) : AndroidViewModel(application
         val newValue = !syncEnabled.value
         syncEnabled.value = newValue
         sharedPrefs.edit().putBoolean("sync_enabled", newValue).apply()
+    }
+
+    fun toggleReverseMode() {
+        val newValue = !isReverseMode.value
+        isReverseMode.value = newValue
+        sharedPrefs.edit().putBoolean("reverse_mode", newValue).apply()
     }
 
     fun onNewItemTextChange(newText: String) {

@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -87,7 +89,7 @@ fun MainScreen() {
     val viewModel: ShoppingViewModel = viewModel(factory = factory)
 
     Scaffold(
-        bottomBar = { AppBottomNavigation(navController) }
+        bottomBar = { AppBottomNavigation(navController, viewModel.isReverseMode.value) }
     ) { innerPadding ->
         NavHost(
             navController = navController,
@@ -108,16 +110,27 @@ fun MainScreen() {
 }
 
 @Composable
-fun AppBottomNavigation(navController: NavController) {
+fun AppBottomNavigation(navController: NavController, isReverseMode: Boolean) {
     val navItems = listOf(Screen.AllItems, Screen.PendingItems, Screen.CheckedItems)
     NavigationBar {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = navBackStackEntry?.destination
 
         navItems.forEach { screen ->
+            val label = when {
+                isReverseMode && screen is Screen.PendingItems -> "To Get"
+                isReverseMode && screen is Screen.CheckedItems -> "Obtained"
+                else -> screen.label
+            }
+            val icon = when {
+                isReverseMode && screen is Screen.PendingItems -> Icons.Filled.CheckCircle
+                isReverseMode && screen is Screen.CheckedItems -> Icons.Filled.ShoppingCart
+                else -> screen.icon
+            }
+
             NavigationBarItem(
-                icon = { Icon(screen.icon, contentDescription = null) },
-                label = { Text(screen.label) },
+                icon = { Icon(icon, contentDescription = null) },
+                label = { Text(label) },
                 selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                 onClick = {
                     navController.navigate(screen.route) {
@@ -309,6 +322,13 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel, items: List<ShoppingItem>) 
                             onDismissRequest = { showMenu = false }
                         ) {
                             DropdownMenuItem(
+                                text = { Text(if (viewModel.isReverseMode.value) "Disable Reverse UI" else "Enable Reverse UI") },
+                                onClick = {
+                                    viewModel.toggleReverseMode()
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text(if (viewModel.syncEnabled.value) "Disable Sync" else "Enable Sync") },
                                 onClick = {
                                     viewModel.toggleSyncSetting()
@@ -359,6 +379,7 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel, items: List<ShoppingItem>) 
                                         item.addedById.isEmpty(),
                             isLinked = isLinked,
                             externalCheck = externalCheck,
+                            isReverseMode = viewModel.isReverseMode.value,
                             onToggle = { viewModel.toggleItemChecked(item) },
                             onDelete = { viewModel.requestDelete(item) },
                             onCopy = { viewModel.copyToOtherList(item) }
@@ -377,6 +398,7 @@ fun ShoppingListItem(
     canDelete: Boolean,
     isLinked: Boolean,
     externalCheck: Boolean,
+    isReverseMode: Boolean,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
     onCopy: () -> Unit
@@ -391,7 +413,7 @@ fun ShoppingListItem(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Checkbox(
-                    checked = item.haveItem,
+                    checked = if (isReverseMode) !item.haveItem else item.haveItem,
                     onCheckedChange = { onToggle() }
                 )
                 if (externalCheck) {
