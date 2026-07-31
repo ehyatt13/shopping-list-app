@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.shoppinglist"
         minSdk = 34
         targetSdk = 36
-        versionCode = 12
-        versionName = "2.3.0"
+        versionCode = 13
+        versionName = "2.3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

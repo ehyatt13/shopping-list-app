@@ -326,8 +326,8 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel, items: List<ShoppingItem>) 
                             DropdownMenuItem(
                                 text = { Text("Export to Clipboard") },
                                 onClick = {
-                                    val uncheckedItems = viewModel.pendingList.joinToString("\n") { it.itemName }
-                                    clipboardManager.setText(AnnotatedString(uncheckedItems))
+                                    val exportText = items.joinToString("\n") { it.itemName }
+                                    clipboardManager.setText(AnnotatedString(exportText))
                                     showMenu = false
                                 }
                             )
